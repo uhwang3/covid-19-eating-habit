@@ -1,5 +1,5 @@
 ---
-title: "Covid-19 and Changes in Eating Habits"
+title: "The Impact of the COVID-19 Pandemic on Changes in Eating Habits for Different Neighborhood Characteristics"
 knit: (function(input_file, encoding) {
     rmarkdown::render(input_file,
       encoding=encoding,
@@ -10,6 +10,9 @@ output:
   rmdformats::downcute:
     downcute_theme: "chaos"
     code_folding: hide
+bibliography: bib/covid-19-eating-habit.bib
+csl: https://raw.githubusercontent.com/citation-style-language/styles/master/apa.csl
+link-citations: yes
 ---
 
 ```{r setup, include=FALSE}
@@ -49,6 +52,275 @@ font_add_google(name = 'Raleway', family = 'Raleway')
 custom.color <- c("#a05195","#f95d6a","#ffa600")
 ```
 
+```{r echo=FALSE}
+df_to_js <- function(x, var_name = "data", ...){
+  json_data <- jsonlite::toJSON(x, ...)
+  htmltools::tags$script(paste0("var ",var_name," = ", json_data, ";"))
+}
+plot.data <- read.csv('data/visit_summary.csv')
+df_to_js(plot.data, var_name = "data")
+```
+
+```{r echo=FALSE}
+htmltools::tagList(
+  htmltools::tags$link(href = "https://fonts.gstatic.com", rel = "preconnect"),
+  htmltools::tags$link(href = "https://fonts.googleapis.com", rel = "preconnect"),
+  htmltools::tags$link(href = "https://fonts.googleapis.com/css2?family=Raleway:wght@100;200;300;400;500&display=swap", 
+                       rel = "stylesheet"),
+  htmltools::tags$link(href = "https://api.mapbox.com/mapbox-gl-js/v2.6.1/mapbox-gl.css", rel = "stylesheet"),
+  htmltools::tags$script(src = "https://d3js.org/d3.v5.min.js"),
+  htmltools::tags$script(src = "https://api.mapbox.com/mapbox-gl-js/v2.6.1/mapbox-gl.js"),
+  htmltools::tags$script(src = "https://cdnjs.cloudflare.com/ajax/libs/jquery/3.3.1/jquery.min.js"),
+  htmltools::tags$script(src = "https://cdn.plot.ly/plotly-2.12.1.min.js")
+)
+```
+
+```{css echo=FALSE}
+*{
+  font-family: 'Raleway', sans-serif;
+  margin: 0;
+}
+#map {
+  position: relative;
+  top: 0;
+  width: 100%;
+  z-index: 0;
+}
+#barPlot {
+  position: relative;
+  left: 0px;
+  top: 100px;
+  width: 400px;
+  height: 500px;
+  z-index: 1;
+}
+.sliderContainer {
+  position: relative;
+  left: 40px;
+  top: 40px;
+  width: 330px;
+  height: 120px;
+  z-index: 1;
+}
+.sliderContent {
+  font-weight: 400;
+  font-size: 13px;
+  color: white;
+  position: relative;
+  left: 23px;
+  top: 0px;
+  width: 100%;
+}
+.slider {
+  -webkit-appearance: none;  /* Override default CSS styles */
+  appearance: none;
+  width: 100%; /* Full-width */
+  height: 8px; /* Specified height */
+  border-radius: 5px;
+  background: #93adad; /* Grey background */
+  outline: none; /* Remove outline */
+  opacity: 0.6; /* Set transparency (for mouse-over effects on hover) */
+  /* -webkit-transition: .2s; /* 0.2 seconds transition on hover */
+  /* transition: opacity .2s; */
+}
+.slider:hover {
+  opacity: 1;
+}
+.slider::-webkit-slider-thumb {
+  -webkit-appearance: none; /* Override default look */
+  appearance: none;
+  width: 17px; /* Set a specific slider handle width */
+  height: 17px; /* Slider handle height */
+  border-radius: 50%;
+  background: #64e8e8; /* Green background */
+  cursor: pointer; /* Cursor on hover */
+}
+```
+
+```{js class.source = ".foldable"}
+$('<div id="chunkBody"></div>').insertAfter(".foldable");
+$("#chunkBody").append('<div id = "map"></div>');
+$("#map").append('<div class = "sliderContainer"></div>');
+$("#map").append('<div id = "barPlot"></div>');
+$(".sliderContainer").append('<div class = "sliderContent"></div>');
+$(".sliderContent").append('<p style="margin-bottom:7px; font-size:16px; font-weight: 500;"> <span id="sliderValue"></span> </p>');
+$(".sliderContent").append('<input id="sliderRange" class="slider" type="range" min="0" max="33" value="0" step="1"></input>');
+$(".sliderContent").append('<p style="text-align:left; margin-bottom: 0em; font-weight: 300; margin-top: 5px"> July 2019 - <span style="float:right"> - April 2022 </span> </p>');
+
+var slider = document.getElementById("sliderRange");
+var sliderValue = document.getElementById("sliderValue");
+
+const yymm = ['July 2019', 'August 2019', 'September 2019', 'October 2019', 'November 2019', 'December 2019',
+              'January 2020', 'February 2020', 'March 2020: first Covid-19 case in the US', 'April 2020', 'May 2020', 'June 2020',
+              'July 2020', 'August 2020', 'September 2020', 'October 2020', 'November 2020', 
+              'December 2020: vaccination started',
+              'January 2021', 'February 2021', 'March 2021', 'April 2021', 'May 2021', 'June 2021',
+              'July 2021', 'August 2021', 'September 2021', 'October 2021', 'November 2021', 'December 2021',
+              'January 2022', 'February 2022', 'March 2022', 'April 2022']
+
+sliderValue.innerHTML = yymm[slider.value]; // Display the default slider value
+
+var page_width = $("#map").width()
+var width = page_width
+var height = page_width*0.7
+
+d3.select("#map")
+  .style("width", width + "px")
+  .style("height", height + "px");
+
+mapboxgl.accessToken = 'pk.eyJ1IjoidWh3YW5nMyIsImEiOiJja3d0bGh4cG8wemxtMm5xcTJ1anc4ajlxIn0.GPUcPfwoUXy6pItqRUvifw';
+var map = new mapboxgl.Map({
+	container: 'map', // container ID
+	style: 'mapbox://styles/uhwang3/cl65mb11m001q15lcdpvr8efm',
+	center: [-84.509340, 33.798925], // starting position [lng, lat]
+	zoom: 9 // starting zoom
+});
+
+const colors = ['#223F9A','#2C51BE','#482BBD','#7A0DA6','#AE0E7F','#CF1750','#E31A1A','#FD7900','#FFC800','#FAE300'];
+
+const yymmMap = ['2019-07', '2019-08', '2019-09', '2019-10', '2019-11', '2019-12',
+                '2020-01', '2020-02', '2020-03', '2020-04', '2020-05', '2020-06',
+                '2020-07', '2020-08', '2020-09', '2020-10', '2020-11', '2020-12',
+                '2021-01', '2021-02', '2021-03', '2021-04', '2021-05', '2021-06',
+                '2021-07', '2021-08', '2021-09', '2021-10', '2021-11', '2021-12',
+                '2022-01', '2022-02', '2022-03', '2022-04']
+
+const yymmPlot = ['X2019.07', 'X2019.08', 'X2019.09', 'X2019.10', 'X2019.11', 'X2019.12',
+                  'X2020.01', 'X2020.02', 'X2020.03', 'X2020.04', 'X2020.05', 'X2020.06',
+                  'X2020.07', 'X2020.08', 'X2020.09', 'X2020.10', 'X2020.11', 'X2020.12',
+                  'X2021.01', 'X2021.02', 'X2021.03', 'X2021.04', 'X2021.05', 'X2021.06',
+                  'X2021.07', 'X2021.08', 'X2021.09', 'X2021.10', 'X2021.11', 'X2021.12',
+                  'X2022.01', 'X2022.02', 'X2022.03', 'X2022.04']
+
+map.on('load', () => {
+  map.addSource('visit_monthly',  {type: 'vector', url: "mapbox://uhwang3.visit_monthly" });
+  map.addSource('atl_boundary',  {type: 'vector', url: "mapbox://uhwang3.atl_boundary" });
+  map.addSource('atl_metro_boundary',  {type: 'vector', url: "mapbox://uhwang3.atl_metro_boundary" });
+
+  map.addLayer(
+    {
+      'id': 'atl_boundary',
+      'type': 'line',
+      'source': 'atl_boundary',
+      'source-layer': 'atl_boundary',
+      'paint': {
+        'line-color': '#798dbd',
+        'line-width': 1
+      }
+    },
+  );
+  
+  map.addLayer(
+    {
+      'id': 'atl_metro_boundary',
+      'type': 'line',
+      'source': 'atl_metro_boundary',
+      'source-layer': 'atl_metro_boundary',
+      'paint': {
+        'line-color': 'rgba(69,81,110,0.5)',
+        'line-width': 0.6
+      }
+    },
+  );
+  
+  map.addLayer(
+    {
+      'id': 'visit_monthly',
+      'type': 'circle',
+      'source': 'visit_monthly',
+      'source-layer': 'visit_monthly',
+      'paint': {
+        'circle-color': {
+          'property' : yymmMap[0],
+          'stops': [[0, colors[0]], [10, colors[1]], [50, colors[2]], [100, colors[3]], [170, colors[4]], [250, colors[5]],
+                    [350, colors[6]], [500, colors[7]], [700, colors[8]], [1000, colors[9]]]
+        },
+        'circle-radius': 1.5
+      }
+    },
+  );
+})
+
+
+function drawPlot(yymm){
+  var trace1 = {
+    x: [data[1]['food_type'], data[3]['food_type'], data[0]['food_type'], data[2]['food_type']],
+    y: [data[1][yymm], data[3][yymm], data[0][yymm], data[2][yymm]],
+    width: [0.4, 0.4, 0.4, 0.4],
+    name: 'Take-out',
+    type: 'bar'
+  };
+
+  var trace2 = {
+    x: [data[1+4]['food_type'], data[3+4]['food_type'], data[0+4]['food_type'], data[2+4]['food_type']],
+    y: [data[1+4][yymm], data[3+4][yymm], data[0+4][yymm], data[2+4][yymm]],
+    width: [0.4, 0.4, 0.4, 0.4],
+    name: 'Dine-in',
+    type: 'bar'
+  };
+
+  var plotData = [trace1, trace2];
+
+  var layout = {barmode: 'stack',
+    paper_bgcolor: 'rgba(0,0,0,0)',
+    plot_bgcolor: 'rgba(0,0,0,0)',
+    colorway: ['#6b5d8c','#7b9fa6'],
+    font: {color: 'white', family: 'Raleway'},
+    legend: {font: {color: 'white', family: 'Raleway'}},
+    yaxis: {range: [0, 4000000]}
+  };
+
+  Plotly.newPlot(barPlot, plotData, layout, {displayModeBar: false});
+}
+
+drawPlot(yymmPlot[0])
+
+function redrawPlot(yymm) {
+  d3.selectAll('#barPlot').remove()
+  $("#map").append('<div id = "barPlot"></div>');
+  drawPlot(yymm)
+};
+
+slider.addEventListener('input', (sr) => {
+  sliderValue.innerHTML = yymm[sr.target.value];
+
+  map.setPaintProperty(
+    'visit_monthly', 'circle-color', {
+      'property' : yymmMap[sr.target.value],
+      'stops': [[0, colors[0]], [10, colors[1]], [50, colors[2]], [100, colors[3]], [170, colors[4]], [250, colors[5]],
+              [350, colors[6]], [500, colors[7]], [700, colors[8]], [1000, colors[9]]]
+    }
+  )
+  
+  redrawPlot(yymmPlot[sr.target.value])
+})
+```
+
+# 1. Introduction
+
+The Covid-19 pandemic has completely changed our lifestyles. Our eating behaviors are certainly one of the primary things that were affected *in negative ways*:
+
+* People are eating more, both in quantity and frequency, and the pattern is more irregular, which leads to weight gain <font size="2">[@sidor; @scarmozzino; @ismail; @yang; @ammar; @alamri]</font>
+
+* People eat more snacks and sweets <font size="2">[@scarmozzino; @yang; @robinson; @cummings; @alamri; @ruizroso]</font>
+
+* People eat more fast-food or food with poor nutrition <font size="2">[@sidor; @ismail; @alamri; @oconnell]</font>
+
+* People eat less fruits and vegetables <font size="2">[@sidor; @scarmozzino; @alamri]</font>
+
+
+Those changes in eating habits must have been different by neighborhoods. The accessibility to healthy, affordable food is not the same for everyone: some neighborhoods can easily access fresh food while others are inundated by fast-food outlets. It is typically harder for marginalized communities to access healthy food at a low price, which puts them at risk of environment-linked nutritional issues <font size="2">[@morland]</font>. In times of crisis with the global pandemic, they are likely to have more difficulties securing healthy food options.
+
+This article explores 1) ***how the Covid-19 pandemic has affected the eating habits in the U.S.***, and 2) ***how the changes in eating habits differ by neighborhood characteristics by analyzing restaurant visiting patterns before and during the pandemic***.
+
+
+# 2. Data at a Glance
+
+The map you have seen at the beginning is based on data from [SafeGraph](https://www.safegraph.com/). SafeGraph provides high-quality data on Point-of-interest (POI)s and their visitors' foot traffics that are captured from anonymous mobile data. The data contain:
+
+* Information on POIs: place ID, name, brand, NAICS code, category tag, location information...
+
+* Weekly visitor pattern: number of visits, where they came from, and how long they stayed...
 
 ```{r dataload1, include=FALSE}
 temp.wd <- paste0(Sys.getenv('USERPROFILE'),
@@ -123,6 +395,8 @@ kable(cbind(file.restaurant %>%
             file.restaurant %>% select(visitor_home_bg)) %>% .[5:7,], format = "simple", row.names = F)
 ```
 
+This study utilizes the `category_tag` to analyze consumption patterns by types of food. Each POI can have multiple category tags:
+
 ```{r tag_example}
 rownames(file.restaurant) <- NULL
 tag_example <- file.restaurant %>% 
@@ -132,6 +406,8 @@ tag_example <- file.restaurant %>%
 
 kable(tag_example, format = "simple", row.names = F)
 ```
+
+I focus on three major keywords commonly mentioned in the literature: ***Snacks & Dessert, Fast-food, and Healthy food***. Those tags are superordinate terms that encompass many food types:
 
 ```{r tags_in_tag}
 all.tags <- poi.r$category_tag
@@ -170,7 +446,11 @@ colnames(tag_freq) <- c('Snacks & Dessert', 'Freq.', 'Fast-food', 'Freq.', 'Heal
 kable(tag_freq, format = "simple", row.names = F, align = c('l','r','l','r','l','r'))
 ```
 
+# 3. Changes in Eating Habit During the Pandemic
 
+The figure below shows the changes in total restaurant visit count and Covid-19 cases in the Atlanta metro area from July 1, 2019 to May 2, 2022. At the very early phase of the pandemic, the total visits remained much lower than the pre-pandemic level. As the vaccination rate increased in early 2021, the total visit count bounced back again and recorded about 80% of the pre-pandemic level. In late 2021, the visit count decreased again as the Omicron variant became rampant, but the trend soon recovered. 
+
+To compare the restaurant visiting patterns before and during the pandemic time, this study selected two periods of time that are two years apart. **July to December 2019** is referred to as ***Before Covid-19***, and **July to December 2021** is referred to as ***During Covid-19*** in this article.
 
 ```{r total_visit, fig.height = 7, fig.width = 10, dev.args = list(bg = 'transparent'), warning = FALSE, message=FALSE}
 # total visitor trend
@@ -194,6 +474,7 @@ p <- ggplot() +
 ```
 ![](img/plot1_annotated.png)
 
+If we look at take-out and dine-in separately, the impact on decreases in visits has always been greater for dine-in visits than take-out visits. After vaccination started, the take-out visits quickly recovered above 90% of what it was before the pandemic. On the other hand, the dine-in visits have gradually recovered from around 55% in January 2021 to 80% in May 2022.
 
 ```{r take_out_dine_in, fig.height = 7, fig.width = 10, dev.args = list(bg = 'transparent'), warning = FALSE}
 # take-out vs. dine-in
@@ -238,6 +519,7 @@ ggplot() +
 
 ```
 
+The table below summarizes that the restaurant visits has decreased by around 20% while the take-out ratio has increased by 6%.
 
 ```{r before_during_summary}
 restaurant.before.covid <- file.restaurant %>% 
@@ -266,6 +548,7 @@ colnames(summary) <- c('Visits before Covid-19', 'Visits during Covid-19', 'Rela
 kable(summary, format = "simple", row.names = F)
 ```
 
+Visits in the Snacks & Desserts and the Fast-food decreased by 2% and 13% respectively. Both the categories experienced decreases but not as much as total visits, which means the share of the two categories among total visits in fact increased during the pandemic. However, visits in the Healthy food category significantly decreased; -45% is the largest decline among the entire food-related tags.
 
 ```{r three_tag_summary}
 
@@ -359,6 +642,7 @@ kable(format = "html", escape = F, align = c("l","r","r","r","r","r"), row.names
   kable_styling("hover", full_width = T)
 ```
 
+The following table clearly shows that types of food that are not so *take-out-friendly* have experienced huge decreases in visitors during the pandemic.
 
 ```{r all_summary}
 total.visit.by.tag.food <- total.visit.by.tag %>% filter(tag.type == 'food')
@@ -390,6 +674,23 @@ total.visit.by.tag.food.vis %>%
   kable_styling("hover", full_width = T, font_size = 14)
 
 ```
+
+
+# 4. Eating Habits and Neighborhood Characteristics
+
+The following table describes the relative changes in restaurant visits in nine different groups of neighborhoods categorized by median household income and minority population (%). 
+
+The relationships between income level and changes in restaurant visits are clear:
+
+* The visit count in the snacks & desserts category, on average, has increased in low- and mid-income neighborhoods while it has decreased in the high-income neighborhoods. 
+
+* The visit count in the fast-food category, on average, has also decreased more in the high-income neighborhoods. 
+
+* The visit count in the healthy food category has significantly decreased in neighborhoods with low and mid proportions of minority populations regardless of their income level. 
+
+* In neighborhoods with high proportions of minority populations, on the other hand, changes in visit count in the healthy food category were associated with income level: low-income & high-minority neighborhoods experienced an 80% decrease, while high-income & high-minority neighborhoods showed a 39% increase although the t-test was not significant.
+	
+The minority population (%) and the changes in restaurant visits did not show a consistent relationship. Particularly, the behaviors of neighborhoods with high minority population (%) were considerably different from the others, while there was not much difference between neighborhoods with low minority population (%) and the ones with mid minority population (%). For example, among the low-income neighborhoods, the ones with high proportions of minority population have experienced a huge decline in total restaurant visits while the other two groups experienced slight decreases.
 
 
 ```{r summary_by_income_and_race, warning=FALSE, message=FALSE, results='hide'}
@@ -566,6 +867,38 @@ for (i in 1:length(inc.cate)){
 ```
 ![](img/table1.png)
 
+
+One important factor that may explain the relationship between the eating habit change and minority population (%) is the geographical location of the neighborhoods. As shown in the maps below, neighborhoods with high minority population (%) are concentrated near the City of Atlanta, while neighborhoods with low minority population (%) are mostly in suburbs. 
+
+```{r load_shp, message=FALSE, include=FALSE}
+setwd(temp.wd)
+atl <- st_read('shp/atl.geojson')
+metro <- st_read('shp/atlanta_msa_counties.geojson')
+tmap_mode('view')
+```
+
+```{r minority_mapping_all, message=FALSE}
+tm_shape(census.sf) + tm_fill(col = 'minority.cate', title = 'Minority (%)', 
+                              palette = custom.color) +
+  tm_shape(metro) + tm_borders(col = '#3b3b3b', lwd = 0.6) +
+  tm_shape(atl) + tm_borders(col = 'red', lwd = 1.3) +
+  tm_view(set.view = 9)
+
+```
+
+The pattern is more distinct for low-income neighborhoods. This necessitates a further analysis that takes account of the geographical aspect and built environment, which will be discussed in the section 6: *Factors Related to Changes in Fast-food Consumption*.
+
+```{r minority_mapping_lowincome, message=FALSE}
+census.lowincome <- census.sf %>% filter(income.cate == '1. 40,000 or less') %>% st_transform(4326)
+tm_shape(census.lowincome) + tm_fill(col = 'minority.cate', title = 'Minority (%)', 
+                                     palette = custom.color) +
+  tm_shape(metro) + tm_borders(col = '#3b3b3b', lwd = 0.6) +
+  tm_shape(atl) + tm_borders(col = 'red', lwd = 1.3) +
+  tm_view(set.view = 9)
+```
+
+Following ANOVA results confirm that both neighborhood income and minority population (%) are significantly associated with the changes in food consumption.
+
 ```{r anova}
 betweenGroupComparison <- function(tag){
   if (tag == ''){
@@ -591,32 +924,14 @@ betweenGroupComparison('Fast Food')
 betweenGroupComparison('Healthy Food')
 ```
 
-```{r load_shp, message=FALSE, results='hide'}
-setwd(temp.wd)
-atl <- st_read('shp/atl.geojson')
-metro <- st_read('shp/atlanta_msa_counties.geojson')
-tmap_mode('view')
-```
 
-```{r minority_mapping_all, message=FALSE}
-tm_shape(census.sf) + tm_fill(col = 'minority.cate', title = 'Minority (%)', 
-                              palette = custom.color) +
-  tm_shape(metro) + tm_borders(col = '#3b3b3b', lwd = 0.6) +
-  tm_shape(atl) + tm_borders(col = 'red', lwd = 1.3) +
-  tm_view(set.view = 9)
+# 5. Changes in Fast-food Consumption
 
-```
+Fast-food takes up a significant part of the contemporary diet of people in the U.S. Before the pandemic, fast-food consumption (%) was around 20 - 30% as shown in the following figures. It was particularly higher in neighborhoods with low median household income, a high proportion of minority population, and the ones that are in suburbs. 
 
+When the pandemic started, fast-food consumption (%) spiked up to almost 40%. It then soon stabilized at a higher value than the pre-pandemic level. The fast-food consumption (%) has been maintained at about 2-3%p higher than before, even until the most recent point in time of the data. This implies that ***people are still consuming fast-food slightly more than they were before the pandemic, even though they have been slowly returning to dine-in restaurants*** (as we have seen in the section 3).
 
-```{r minority_mapping_lowincome, message=FALSE}
-census.lowincome <- census.sf %>% filter(income.cate == '1. 40,000 or less') %>% st_transform(4326)
-tm_shape(census.lowincome) + tm_fill(col = 'minority.cate', title = 'Minority (%)', 
-                                     palette = custom.color) +
-  tm_shape(metro) + tm_borders(col = '#3b3b3b', lwd = 0.6) +
-  tm_shape(atl) + tm_borders(col = 'red', lwd = 1.3) +
-  tm_view(set.view = 9)
-```
-
+This trend is found in any type of neighborhood ***only except for low-income neighborhoods***. The fast-food consumption (%) of low-income neighborhoods has gone down to the pre-pandemic level around September 2021. This is not intuitively understandable, but one clear thing is that this cannot be interpreted solely by the income since the income, the minority population (%), and whether it is in a city or suburb are not independent of each other. Therefore, this study conducts a linear regression to examine the ceteris paribus effect of each neighborhood characteristic.
 
 ```{r fast_food_by_race, fig.height = 7, fig.width = 10, dev.args = list(bg = 'transparent'), warning = FALSE, message=FALSE}
 poi.census <- st_join(poi.r.sf %>% st_transform(st_crs(census.sf)) %>% select(placekey), 
@@ -636,50 +951,6 @@ poi.census <- st_join(poi.r.sf %>% st_transform(st_crs(census.sf)) %>% select(pl
 
 file.restaurant %<>% left_join(poi.census, by = 'placekey')
 
-# race
-fast.food.race <- file.restaurant %>%
-  group_by(date_range_end, fast.food, minority.cate) %>%
-  summarize(visit_counts = sum(visit_counts)) %>%
-  spread(key = fast.food, value = visit_counts) %>%
-  rename(f = '1', nf = '0') %>%
-  mutate(date = as.Date(date_range_end)) %>%
-  drop_na() %>% 
-  as.data.frame()
-
-fast.food.race1 <- fast.food.race %>% 
-  filter(minority.cate == "1. 0-30%") %>% 
-  mutate(f.2wk.ma = rollmean(f, k = 2, fill = NA, align = 'center'),
-         nf.2wk.ma = rollmean(nf, k = 2, fill = NA, align = 'center')) %>% 
-  mutate(fast.food.ratio = f.2wk.ma/(f.2wk.ma+nf.2wk.ma))
-
-fast.food.race2 <- fast.food.race %>% 
-  filter(minority.cate == "2. 30-70%") %>% 
-  mutate(f.2wk.ma = rollmean(f, k = 2, fill = NA, align = 'center'),
-         nf.2wk.ma = rollmean(nf, k = 2, fill = NA, align = 'center')) %>% 
-  mutate(fast.food.ratio = f.2wk.ma/(f.2wk.ma+nf.2wk.ma))
-
-fast.food.race3 <- fast.food.race %>%
-  filter(minority.cate == "3. 70-100%") %>% 
-  mutate(f.2wk.ma = rollmean(f, k = 2, fill = NA, align = 'center'),
-         nf.2wk.ma = rollmean(nf, k = 2, fill = NA, align = 'center')) %>% 
-  mutate(fast.food.ratio = f.2wk.ma/(f.2wk.ma+nf.2wk.ma))
-
-fast.food.race <- rbind(fast.food.race1 %>% mutate(type = '1. ~ 30%'),
-                        fast.food.race2 %>% mutate(type = '2. 30 ~ 70%'),
-                        fast.food.race3 %>% mutate(type = '3. 70% ~'))
-
-ggplot() +
-  covidCaseVizPct('Fast-food ratio', max(fast.food.race$fast.food.ratio, na.rm = T)) +
-  geom_line(data = fast.food.race, 
-            aes(date, fast.food.ratio, col = type), lwd = 1) +
-  scale_color_manual(values = c(custom.color[1], custom.color[2], custom.color[3])) + 
-  scale_x_date(date_breaks = '3 months', date_labels = "%b`%y", expand = c(0, 0)) +
-  ggtitle('Fast-food ratio: by minority population') +
-  theme_bw() + 
-  theme_saved
-```
-
-```{r fast_food_by_income, fig.height = 7, fig.width = 10, dev.args = list(bg = 'transparent'), warning = FALSE, message=FALSE}
 # income
 fast.food.income <- file.restaurant %>%
   group_by(date_range_end, fast.food, income.cate) %>%
@@ -724,6 +995,50 @@ ggplot() +
 
 ```
 
+```{r fast_food_by_income, fig.height = 7, fig.width = 10, dev.args = list(bg = 'transparent'), warning = FALSE, message=FALSE}
+# race
+fast.food.race <- file.restaurant %>%
+  group_by(date_range_end, fast.food, minority.cate) %>%
+  summarize(visit_counts = sum(visit_counts)) %>%
+  spread(key = fast.food, value = visit_counts) %>%
+  rename(f = '1', nf = '0') %>%
+  mutate(date = as.Date(date_range_end)) %>%
+  drop_na() %>% 
+  as.data.frame()
+
+fast.food.race1 <- fast.food.race %>% 
+  filter(minority.cate == "1. 0-30%") %>% 
+  mutate(f.2wk.ma = rollmean(f, k = 2, fill = NA, align = 'center'),
+         nf.2wk.ma = rollmean(nf, k = 2, fill = NA, align = 'center')) %>% 
+  mutate(fast.food.ratio = f.2wk.ma/(f.2wk.ma+nf.2wk.ma))
+
+fast.food.race2 <- fast.food.race %>% 
+  filter(minority.cate == "2. 30-70%") %>% 
+  mutate(f.2wk.ma = rollmean(f, k = 2, fill = NA, align = 'center'),
+         nf.2wk.ma = rollmean(nf, k = 2, fill = NA, align = 'center')) %>% 
+  mutate(fast.food.ratio = f.2wk.ma/(f.2wk.ma+nf.2wk.ma))
+
+fast.food.race3 <- fast.food.race %>%
+  filter(minority.cate == "3. 70-100%") %>% 
+  mutate(f.2wk.ma = rollmean(f, k = 2, fill = NA, align = 'center'),
+         nf.2wk.ma = rollmean(nf, k = 2, fill = NA, align = 'center')) %>% 
+  mutate(fast.food.ratio = f.2wk.ma/(f.2wk.ma+nf.2wk.ma))
+
+fast.food.race <- rbind(fast.food.race1 %>% mutate(type = '1. ~ 30%'),
+                        fast.food.race2 %>% mutate(type = '2. 30 ~ 70%'),
+                        fast.food.race3 %>% mutate(type = '3. 70% ~'))
+
+ggplot() +
+  covidCaseVizPct('Fast-food ratio', max(fast.food.race$fast.food.ratio, na.rm = T)) +
+  geom_line(data = fast.food.race, 
+            aes(date, fast.food.ratio, col = type), lwd = 1) +
+  scale_color_manual(values = c(custom.color[1], custom.color[2], custom.color[3])) + 
+  scale_x_date(date_breaks = '3 months', date_labels = "%b`%y", expand = c(0, 0)) +
+  ggtitle('Fast-food ratio: by minority population') +
+  theme_bw() + 
+  theme_saved
+```
+
 ```{r fast_food_by_location, fig.height = 7, fig.width = 10, dev.args = list(bg = 'transparent'), warning = FALSE, message=FALSE}
 fast.food.ratio.city <- file.restaurant %>%
   filter(in.city == 1) %>%
@@ -762,6 +1077,11 @@ ggplot() +
   theme_bw() + 
   theme_saved
 ```
+
+
+# 6. Factors Related to Changes in Fast-food Consumption
+
+The table below lists variables that are representing neighborhood characteristics which include socio-demographics and built environment.
 
 ```{r}
 hux('Category' = c("Socio-demographics", "", "", "", "", "", "", "", "", "", "", "", "",
@@ -806,6 +1126,7 @@ hux('Category' = c("Socio-demographics", "", "", "", "", "", "", "", "", "", "",
   set_row_height(0.7)
 ```
 
+An issue with the set of variables is that they are highly correlated with each other -- as illustrated in the following correlation matrix between continuous variables. To prevent a multicollinearity issue, this study condenses the variables into a fewer number of underlying factors through a factor analysis.
 
 ```{r correlation_btw_vars, dev = 'png', dev.args = list(bg = 'transparent'), warning = FALSE, message=FALSE}
 setwd(temp.wd)
@@ -872,9 +1193,13 @@ for i in range(0, 800):
                     if abs(x)+abs(y) < 7:
                         corr[i+x][j+y][3] = 1
 
+corr = corr[100:,:]
+
 plt.imsave("img/corr_transparent.png", corr)
 ```
 ![](img/corr_transparent.png)
+
+The following figure shows the result of a scree test which is used to determine the number of factors to extract in the factor analysis. The recommended number of factors is four.
 
 ```{r set_factor_num, fig.height = 7, fig.width = 10, dev.args = list(bg = 'transparent'), warning = FALSE, message=FALSE}
 ## FACTOR ANALYSIS
@@ -959,6 +1284,16 @@ ap <- parallel(subject = nrow(data.factor), var = ncol(data.factor),
 ns <- nScree(x=ev$values, aparallel = ap$eigen$qevpea)
 plotnScreeCustom(ns)
 ```
+
+As shown in the following table, the factor analysis provided four reasonable factors: 1) ***Urbanness***, 2) ***Low SES*** (socio-economic status), 3) ***Family size***, and 4) ***Road infrastructure***. 
+
+* The ***‘Urbanness’*** is characterized by a high proportion of one-person households, high WalkScore, high population and employment density, short distance to the grocery store, small block size, and a great number of nearby restaurants but a low proportion of fast-food outlets among the restaurants. 
+
+* The ***‘Low SES’*** is characterized by a high proportion of residents with low educational backgrounds, low income, a high proportion of workers in service industries, a low proportion of married households, and a high proportion of minority population. 
+
+* The ***‘Family size’*** is characterized by a high proportion of households with four or more persons and a high proportion of people who are married and have kids. 
+
+* The ***‘Road infrastructure’*** is characterized by high road and intersection density.
 
 ```{r factor_analysis, message=FALSE, warning=FALSE}
 # factor analysis: n=4
@@ -1068,8 +1403,10 @@ lm1 <- lm(fast.food.change.benchmark ~ Factor1 + Factor2 + Factor3 + Factor4 + f
 lm.summary <- summary(lm1)
 ```
 
-`r round(lm.summary$r.squared,2)`
-`r round(lm.summary$adj.r.squared,2)`
+
+The four factor scores are the main variables in the OLS model. Since the dependent variable is the relative change in fast-food consumption, it is sensitive to the initial value. Therefore, the model also includes the initial value of the fast-food consumption (%) before the pandemic and its interaction terms with the four factor scores.
+
+The sample size is **951** and the adjusted r-squared is **`r round(lm.summary$adj.r.squared,2)`**. Three factors – ***Urbanness, Low SES,*** and ***Family size*** – are significantly associated with the change in fast-food consumption (%). Since the model has interaction terms between continuous variables, it should be interpreted with caution. What each estimated coefficient of the factors indicates is each factor’s impact on the dependent variable ***when the initial fast-food consumption ratio is zero***; the estimated coefficient of each interaction term needs to be interpreted together.
 
 ```{r regression_vis, fig.height = 7, fig.width = 10, dev.args = list(bg = 'transparent'), warning = FALSE, message=FALSE}
 lm.coef <- as.data.frame(round(lm.summary$coefficients, 3))[,-3]
@@ -1095,6 +1432,14 @@ lm.coef %>%
   row_spec(c(1,2,3,4,6,7,9), bold = T)
 ```
 
+The following figure illustrates what the estimated coefficient of the three factors would be with respect to the value of the fast-food consumption (%) before the pandemic. The overlaid histogram demonstrates the distribution of fast-food consumption (%) before the pandemic. As the initial value of the fast-food consumption (%) before the pandemic on the X axis increases, the impact of urbanness decreases, the impact of low SES is constant, and the impact of family size increases since their interaction terms are negative, insignificant, and positive, respectively. What it means is:
+
+* In a neighborhood with an initial fast-food consumption (%) before the pandemic of 10% or higher, a high urbanness would lead to a decrease in the fast-food consumption (%). 
+  + Since most neighborhoods have an initial fast-food consumption (%) higher than 10%, it is reasonable to summarize that urbanness has a positive impact on reducing fast-food consumption. 
+
+* In a neighborhood that has a low initial fast-food consumption (%), a big family is likely to eat less fast-food during the pandemic compared to a household with one or two persons; however, the effect will be the opposite in a neighborhood that has a very high initial fast-food consumption (%).
+
+* People in a neighborhood with low SES eat more fast-food during the pandemic compared to people with high SES regardless of the initial fast-food consumption (%). 
 
 ```{r coef_vis, fig.height = 7, fig.width = 10, dev.args = list(bg = 'transparent'), warning = FALSE, message=FALSE}
 ### visualization
@@ -1133,4 +1478,26 @@ ggplot() +
 ```
 
 
+# 7. Summary
+
+1. The analyses based on restaurant visiting data confirmed what the survey-based studies found: people have been eating unhealthier during the pandemic. 
+    i) People are eating more snacks, desserts, and fast-food, but less healthy food such as salad, Mediterranean food, and vegetarian food.
+    ii) A preference for take-out to avoid social interactions during the pandemic led to a preference for unhealthy food like snacks, desserts, and fast-food.
+
+2. People in low-income neighborhoods have had an unhealthier diet than people in the high-income neighborhood. However, the relationship between the minority population (%) and the changes in eating habits was mixed, 
+
+3. Urbanness (e.g., high walkability, high density, short distance to a grocery store, and a great number of nearby restaurants) has a positive effect on reducing fast-food consumption and the impact gets greater in neighborhoods where the initial fast-food consumption (%) is high.
+    i) Eating habits of people in neighborhoods with high fast-food consumption, which are typically marginalized communities, are more strongly influenced by the surrounding environment than others. 
+
+4. Low SES (e.g., low education, low income, and a high proportion of minority population) is associated with an increase in the consumption of fast-food.
+    i) The eating habits of marginalized populations have gotten unhealthier during the pandemic.
+
+> **_Efforts should be made to ensure that people in marginalized neighborhoods have access to various food options within a walkable distance._**
+
+5. Fast-food consumption (%) is still higher than the pre-pandemic average. 
+    i) Even though people are slowly returning to restaurants as dine-in customers, their fast-food consumption (%) is still 2-3% higher than before the pandemic.
+
+
+
+# References
 
